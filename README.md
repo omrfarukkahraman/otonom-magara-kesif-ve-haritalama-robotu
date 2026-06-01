@@ -62,4 +62,11 @@ python otonom_magara_robotu.py
 | **`[YÖN / WASD]`** | **Manuel Moddayken** robotu manuel olarak sürmenizi sağlar. (İleri, geri, sağa/sola dönüş). |
 
 ---
+
+## 🎥 Tanıtım ve Demo Videosu
+
+Simülasyonun çalışmasını gösteren örnek ekran kaydına, proje klasöründeki şu video dosyasından ulaşabilirsiniz:
+* `NEÜ Robotik - Otonom Mağara Robotu Simülasyonu (21370031058) 2026-06-01 15-36-12.mp4`
+
+---
 *Bu proje akademik değerlendirme amacıyla hazırlanmıştır.*

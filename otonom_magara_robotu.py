@@ -178,6 +178,7 @@ class CaveRobot:
         self.path_history = []        # Gidilen yolun geçmiş koordinatları
         self.stuck_counter = 0        # Sıkışma kontrol sayacı
         self.last_pos = (self.x, self.y)
+        self.drill_effect_timer = 0   # Kazi efekti zamanlayicisi
         
     def get_grid_pos(self):
         """Mevcut piksel konumunu harita hücre koordinatına çevirir."""
@@ -227,6 +228,10 @@ class CaveRobot:
         """
         LiDAR verilerini kullanarak robotun kendi haritasını (SLAM Grid) günceller.
         """
+        # Kazi efektini say
+        if self.drill_effect_timer > 0:
+            self.drill_effect_timer -= 1
+            
         grid_h = len(mapped_grid)
         grid_w = len(mapped_grid[0])
         rx, ry = self.get_grid_pos()
@@ -397,6 +402,43 @@ class CaveRobot:
             
         # Seçilen yöne doğru hafif dönüş açısı uygula
         return best_offset * 0.05
+
+    def drill_obstacle(self, grid, mapped_grid):
+        """
+        Robotun önündeki engelleri matkap/lazer ile kırıp temizler (G tuşu).
+        Sınır duvarlarına zarar vermez.
+        """
+        if self.battery <= 0:
+            return False
+            
+        # Batarya harca (her kazida %3.5 tuketilir)
+        self.battery = max(0.0, self.battery - 3.5)
+        self.drill_effect_timer = 15 # 15 kare boyunca görsel efekt gösterilir
+        
+        drill_range = 50.0
+        cos_a = math.cos(self.angle)
+        sin_a = math.sin(self.angle)
+        grid_h = len(grid)
+        grid_w = len(grid[0])
+        
+        for d in range(10, int(drill_range), 5):
+            tx = self.x + d * cos_a
+            ty = self.y + d * sin_a
+            gx = int(tx // self.cell_size)
+            gy = int(ty // self.cell_size)
+            
+            # Sınır duvarlarını (0 ve grid_size-1) kırma
+            if 1 <= gx < grid_w - 1 and 1 <= gy < grid_h - 1:
+                if grid[gy][gx] == 1:
+                    # Robotun geçebilmesi için 3x3'lük bir alanı temizle
+                    for dy in [-1, 0, 1]:
+                        for dx in [-1, 0, 1]:
+                            nx, ny = gx + dx, gy + dy
+                            if 1 <= nx < grid_w - 1 and 1 <= ny < grid_h - 1:
+                                grid[ny][nx] = 0
+                                mapped_grid[ny][nx] = 0
+                    return True
+        return False
 
     def _apply_movement(self, grid):
         """Robotun fiziksel konumunu günceller ve duvar çarpışma kontrolü yapar."""
@@ -572,6 +614,20 @@ class SimulationApp:
                     # Çarpma noktasına küçük bir kırmızı lazer noktası çiz
                     pygame.draw.circle(self.screen, COLOR_MAPPED_WALL, (int(hx), int(hy)), 2)
                     
+        # Kazı/Matkap Efektini Çiz
+        if self.robot.drill_effect_timer > 0:
+            cos_a = math.cos(self.robot.angle)
+            sin_a = math.sin(self.robot.angle)
+            end_x = self.robot.x + 50.0 * cos_a
+            end_y = self.robot.y + 50.0 * sin_a
+            # Parlak camgöbeği/turkuaz kazı ışını çiz
+            pygame.draw.line(self.screen, (34, 211, 238), (self.robot.x, self.robot.y), (end_x, end_y), 4)
+            # Uç noktada parıldama efekti
+            surf = pygame.Surface((self.sim_width, self.sim_height), pygame.SRCALPHA)
+            pygame.draw.circle(surf, (34, 211, 238, 150), (int(end_x), int(end_y)), 15)
+            pygame.draw.circle(surf, (255, 255, 255, 200), (int(end_x), int(end_y)), 6)
+            self.screen.blit(surf, (0, 0))
+                    
         # Referans Gerçek Mağara Sınırlarını İnce Çizgi Olarak Çiz (İstenirse)
         if self.show_actual_cave:
             for y in range(self.grid_size):
@@ -695,6 +751,7 @@ class SimulationApp:
             ("[V]", "Gerçek Mağara Sınırlarını Göster / Gizle"),
             ("[R]", "Haritayı Yeniden Üret ve Robotu Sıfırla"),
             ("[C]", "Robot Bataryasını Doldur (%100)"),
+            ("[G]", "Önündeki Mağara Engelini Kırar/Kazar"),
             ("[YÖN / WASD]", "Manuel Modda Robotu Sürme")
         ]
         
@@ -736,6 +793,8 @@ class SimulationApp:
                         self.reset_simulation()
                     elif event.key == pygame.K_c:
                         self.robot.battery = 100.0
+                    elif event.key == pygame.K_g:
+                        self.robot.drill_obstacle(self.cave_grid, self.mapped_grid)
             
             # --- FİZİK VE GÜNCELLEME DÖNGÜSÜ ---
             if not self.is_paused:

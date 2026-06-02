@@ -299,7 +299,7 @@ class CaveRobot:
         dist_moved = math.sqrt(dx*dx + dy*dy)
         self.last_pos = (self.x, self.y)
         
-        if dist_moved < 0.2 and self.state != "DONUS":
+        if dist_moved < 0.2:
             self.stuck_counter += 1
         else:
             self.stuck_counter = max(0, self.stuck_counter - 1)
@@ -443,9 +443,25 @@ class CaveRobot:
         if can_move_y:
             self.y = next_y
             
+        # Duvarın içine sıkışmayı önleyici aktif itme (Nudge Recovery)
+        # Eğer robot hareket edemiyorsa ve duvara çok yakınsa zıt yöne ittirilir
+        if not can_move_x or not can_move_y:
+            self.stuck_counter += 1
+            if self.stuck_counter > 25 and self.lidar_data:
+                # En yakın duvar yönünü bul
+                min_ray_idx = min(range(self.num_rays), key=lambda idx: self.lidar_data[idx][0])
+                min_dist, _, _, hit = self.lidar_data[min_ray_idx]
+                if hit and min_dist < self.radius + 8:
+                    push_angle = self.angle + (min_ray_idx * (2 * math.pi / self.num_rays)) + math.pi
+                    self.x += 2.0 * math.cos(push_angle)
+                    self.y += 2.0 * math.sin(push_angle)
+                    self.stuck_counter = 0 # Sıfırla
+        else:
+            self.stuck_counter = max(0, self.stuck_counter - 1)
+            
         # Hareket halindeyken bataryayı tüket
         if self.speed != 0:
-            self.battery = max(0.0, self.battery - 0.015)
+            self.battery = max(0.0, self.battery - 0.002)
             
         # Gidilen yolun geçmişini güncelle (Her 5 karede bir yeni konum ekle)
         if len(self.path_history) == 0 or math.dist((self.x, self.y), self.path_history[-1]) > 5:
